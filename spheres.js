@@ -234,4 +234,32 @@ function loop()
 	div.innerHTML = `Call to doSomething took ${t1 - t0} milliseconds.`;
 }
 
-loop();
+function MakePoint(x,y,z) { return { x:x, y:y, z:z } }
+function test_DotProduct()
+{
+	const result1 = DotProduct(MakePoint(0,0,0), MakePoint(0,0,0));
+	if (result1 != 0) throw "error";
+}
+
+function RunTests()
+{
+	try
+	{
+		test_DotProduct();
+	}
+	catch
+	{
+		const div = document.getElementById("performance");
+		div.innerHTML = "error running tests";
+		return false;
+	}
+
+	return true;
+}
+
+
+const ready = RunTests();
+
+if (ready) loop();
+
+
