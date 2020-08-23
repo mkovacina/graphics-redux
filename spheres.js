@@ -43,6 +43,12 @@ const ctx = canvas.getContext('2d');
 const width = canvas.width;//= window.innerWidth;
 const height = canvas.height;// = window.innerHeight;
 
+// from the gabrielgambetta.com resource
+// implement a double-buffered approach
+// remember this from Java...
+const canvas_buffer = ctx.getImageData(0, 0, canvas.width, canvas.height);
+const canvas_pitch = canvas_buffer.width * 4;
+
 const Cw = width;
 const Ch = height;
 
@@ -77,14 +83,24 @@ const s1 = new Sphere({x:0,y:-1,z:3}, 1, [255,0,0]);
 
 Spheres = [s1];
 
+// just a little optimization
+// why calculate this for every invocation
+// needs more refactoring to be more testable
+//  since it relies on global data
+const ViewportWidthToCanvasWidthRatio = Vw/Cw;
+const ViewportWidthToCanvasHeightRatio = Vh/Ch;
+
 function CanvasToViewport(Cx,Cy)
 {
-	const Vx = Cx*Vw/Cw;
-	const Vy = Cy*Vh/Ch
+	const Vx = Cx*ViewportWidthToCanvasWidthRatio;
+	const Vy = Cy*ViewportWidthToCanvasHeightRatio;
 	const Vz = 1;
 
 	return {x:Vx,y:Vy,z:Vz};
 }
+
+const id   = ctx.createImageData(1,1);	// only do this once per page
+const data = id.data;						// only do this once per page
 
 function DrawPixel(Cx,Cy,color)
 {
@@ -94,14 +110,20 @@ function DrawPixel(Cx,Cy,color)
 	
 	const sx = Cw/2 + Cx;
 	const sy = Ch/2 - Cy;
+	
+	if (sx < 0 || sx >= Cw || sy < 0 || sy >= Ch) return;
+ 
+	var offset = 4*sx + canvas_pitch*sy;
+	canvas_buffer.data[offset+0] = color[0];
+	canvas_buffer.data[offset+1] = color[1];
+	canvas_buffer.data[offset+2] = color[2];
+	canvas_buffer.data[offset+3] = 255; 
 	//console.log(`canvas (n${Cx},${Cy}) to screen (${sx},${sy})`);
-	var id = ctx.createImageData(1,1); // only do this once per page
-	var d  = id.data;                        // only do this once per page
-	d[0]   = color[0];
-	d[1]   = color[1];
-	d[2]   = color[2];
-	d[3]   = 255255;
-	ctx.putImageData( id, sx, sy );     
+	//data[0]   = color[0];
+	//data[1]   = color[1];
+	//data[2]   = color[2];
+	//data[3]   = 255;
+	//ctx.putImageData( id, sx, sy );     
 	//console.log(`canvas (n${Cx},${Cy}) to screen (${sx},${sy}) with color ${id.data}`);
 	//ctx.fillRect(sx,sy,1,1);
 }
@@ -127,8 +149,12 @@ function IntersectRaySphere(origin, direction, sphere)
 		return [Infinity,Infinity];
 	}
 
-	const t1 = (-k2 + Math.sqrt(discriminant)) / (2*r*k1);
-	const t2 = (-k2 - Math.sqrt(discriminant)) / (2*r*k1);
+	// minor optimization
+	// avoid recomputing
+	const k1Times2 = k1 << 1;
+	const discriminantSquareRooted = Math.sqrt(discriminant);
+	const t1 = (-k2 + discriminantSquareRooted) / k1Times2;
+	const t2 = (-k2 - discriminantSquareRooted) / k1Times2;
 	return [t1,t2];
 }
 
@@ -184,7 +210,9 @@ function loop()
 	//
 	// substitute P from the first equestion into the second
 	//
-	
+
+	const t0 = performance.now();
+
 	for ( x = -Cw/2; x < Cw/2; x++)
 	{
 		for( y = -Ch/2; y < Ch/2; y++ )
@@ -194,7 +222,14 @@ function loop()
 			DrawPixel(x,y,color)
 		}
 	}
-}
 
+	const t1 = performance.now();
+ 
+	ctx.putImageData(canvas_buffer, 0, 0);
+
+	console.log(`Call to doSomething took ${t1 - t0} milliseconds.`);
+	const div = document.getElementById("performance");
+	div.innerHTML = `Call to doSomething took ${t1 - t0} milliseconds.`;
+}
 
 loop();
