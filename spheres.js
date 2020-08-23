@@ -80,8 +80,8 @@ function VectorSubtract(a,b)
 
 
 const s1 = new Sphere({x:0 ,y:-1,z:3}, 1, [255,0  ,0  ]);
-const s2 = new Sphere({x:2 ,y:0 ,z:4}, 1, [0  ,0  ,255]);
-const s3 = new Sphere({x:-2,y:0 ,z:4}, 1, [0  ,255,0  ]);
+const s2 = new Sphere({x:0 ,y:0 ,z:5}, 1, [0  ,0  ,255]);
+const s3 = new Sphere({x:-1,y:0 ,z:4}, 1, [0  ,255,0  ]);
 
 Spheres = [s1,s2,s3];
 
