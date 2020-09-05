@@ -312,9 +312,21 @@ function TraceRay(origin, direction, t_min, t_max)
 	//	from the center of the sphere to the point
 	//	then we divide by the length to make this a normal vector
 	N = VectorSubtract(P, closest_sphere.center);
-	N = N / VectorLength(N);
+	//N = N / VectorLength(N);
+	N = VectorMultiplyScalar(N, 1.0 / VectorLength(N));
 
-	return closest_sphere.color * ComputeLighting( P, N, Lights );
+	var intensity = ComputeLighting( P, N, Lights );
+
+	//var color = closest_sphere.color * intensity;
+	// no mike, this isn't a real language that you are working with
+	// nor is it matlab
+	// color is 1x3 vector
+	// and javascript will gladly multiple this...
+	// ...and give you NaN
+	// ....and you didn't write tests for TraceRay yet because......
+	var color = VectorMultiplyScalar(closest_sphere.color,intensity);
+
+	return color;
 }
 
 
@@ -344,25 +356,26 @@ function loop()
 
 	try
 	{
-	const t0 = performance.now();
+		const t0 = performance.now();
 
-	for ( x = -Cw/2; x < Cw/2; x++)
-	{
-		for( y = -Ch/2; y < Ch/2; y++ )
+		for ( x = -Cw/2; x < Cw/2; x++)
 		{
-			D = CanvasToViewport(x,y);
-			color = TraceRay(O,D,1,Infinity);
-			DrawPixel(x,y,color)
+			for( y = -Ch/2; y < Ch/2; y++ )
+			{
+				D = CanvasToViewport(x,y);
+				color = TraceRay(O,D,1,Infinity);
+				console.assert( color !== NaN, "color is bad");
+				DrawPixel(x,y,color)
+			}
 		}
-	}
 
-	const t1 = performance.now();
- 
-	ctx.putImageData(canvas_buffer, 0, 0);
+		const t1 = performance.now();
+	 
+		ctx.putImageData(canvas_buffer, 0, 0);
 
-	console.log(`Call to doSomething took ${t1 - t0} milliseconds.`);
-	const div = document.getElementById("performance");
-	div.innerHTML = `Call to doSomething took ${t1 - t0} milliseconds.`;
+		console.log(`Call to doSomething took ${t1 - t0} milliseconds.`);
+		const div = document.getElementById("performance");
+		div.innerHTML = `Call to doSomething took ${t1 - t0} milliseconds.`;
 	}
 	catch(error)
 	{
@@ -432,6 +445,52 @@ function test_VectorMultiplyScalar()
 	assert( PointsAreEqual(expected,actual), "didn't scalar multiply correctly");
 }
 
+function test_ComputeLighting()
+{
+	let delta = 0.000000001
+	// basic ambient
+	{
+		let light1 = Light.CreateAmbientLight(0.1);
+		let p = MakePoint(0,0,0);
+		let n = MakePoint(0,0,0);
+		let actual = ComputeLighting(p,n,[light1]);
+		let expected = 0.1;
+		assert( expected === actual, "failed basic ambient light computation" );
+	}
+	// basic point 
+	{
+		let light1 = Light.CreatePointLight(0.1, MakePoint(1,1,1));
+		let p = MakePoint(0,0,0);
+		let n = MakePoint(1,1,1);
+		let actual = ComputeLighting(p,n,[light1]);
+		let expected = 0.1000;
+		let difference = Math.abs(expected-actual);
+		assert( difference < delta, "failed basic point light computation" );
+	}
+	// basic directional  
+	{
+		let light1 = Light.CreateDirectionalLight(0.1, MakePoint(1,1,1));
+		let p = MakePoint(0,0,0);
+		let n = MakePoint(1,1,1);
+		let actual = ComputeLighting(p,n,[light1]);
+		let expected = 0.1000;
+		let difference = Math.abs(expected-actual);
+		assert( difference  < delta, "failed basic directional light computation" );
+	}
+	// basic combined
+	{
+		let light1 = Light.CreatePointLight(0.1, MakePoint(1,1,1));
+		let light2 = Light.CreatePointLight(0.1, MakePoint(1,1,1));
+		let light3 = Light.CreateDirectionalLight(0.1, MakePoint(1,1,1));
+		let p = MakePoint(0,0,0);
+		let n = MakePoint(1,1,1);
+		let actual = ComputeLighting(p,n,[light1,light2,light3]);
+		let expected = 0.3;
+		let difference = Math.abs(expected-actual);
+		assert( difference < delta, "failed basic combined light computation" );
+	}
+}
+
 function RunTests()
 {
 	try
@@ -440,6 +499,7 @@ function RunTests()
 		test_VectorLength();
 		test_LightCreation();
 		test_VectorMultiplyScalar();
+		test_ComputeLighting();
 	}
 	catch(error)
 	{
