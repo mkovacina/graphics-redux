@@ -43,7 +43,7 @@ const ctx = canvas.getContext('2d');
 const width = canvas.width;//= window.innerWidth;
 const height = canvas.height;// = window.innerHeight;
 
-function MakePoint(x,y,z) { return { x:x, y:y, z:z } }
+function MakePoint(x,y,z) { return [ x, y, z ] }
 
 // from the gabrielgambetta.com resource
 // implement a double-buffered approach
@@ -58,7 +58,7 @@ const Vw = 1;
 const Vh = 1;
 const  d = 1;
 
-const O = {x:0, y:0, z:0};
+const O = MakePoint(0,0,0);
 
 class Sphere
 {
@@ -113,26 +113,48 @@ class Light
 	}
 }
 
+function PointsAreEqual(p1,p2)
+{
+	return p1[0] === p2[0] && p1[1] === p2[1] && p1[2] === p2[2];
+}
+
 function DotProduct(a,b)
 {
-	return a.x*b.x + a.y*b.y+a.z*b.z;
+	return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+}
+
+function VectorLength(x)
+{
+	return Math.sqrt(DotProduct(x,x));
 }
 
 function VectorSubtract(a,b)
 {
-	return {x:a.x-b.x, y:a.y-b.y, z:a.z-b.z};
+	return MakePoint(a[0]-b[0], a[1]-b[1], a[2]-b[2]);
 }
 
+function VectorAdd(a,b)
+{
+	return MakePoint(a[0]+b[0], a[1]+b[1], a[2]+b[2]);
+}
 
-const s1 = new Sphere({x:0 ,y:-1,z:3}, 1, [255,0  ,0  ]);
-const s2 = new Sphere({x:0 ,y:0 ,z:5}, 1, [0  ,0  ,255]);
-const s3 = new Sphere({x:-1,y:0 ,z:4}, 1, [0  ,255,0  ]);
+function VectorMultiplyScalar(v,c)
+{
+	return MakePoint(v[0]*c, v[1]*c, v[2]*c);
+}
 
-const l1 = new Light(LightType.Ambient, 0.2);
-const l2 = new Light(LightType.Point, 0.6, MakePoint(2,1,0));
-const l3 = new Light(LightType.Directional, 0.2, MakePoint(1,4,4));
+// xxx: replace the color array with a color class??
+//      everything isn't "a point"
+const s1 = new Sphere(MakePoint(0 ,-1,3), 1,       [255,0  ,0  ]);
+const s2 = new Sphere(MakePoint(0 ,0 ,5), 1,       [0  ,0  ,255]);
+const s3 = new Sphere(MakePoint(-1,0 ,4), 1,       [0  ,255,0  ]);
+const s4 = new Sphere(MakePoint(0,-5001 ,0), 5000, [255  ,255,0  ]);
 
-Spheres = [s1,s2,s3];
+const l1 = Light.CreateAmbientLight(0.2);
+const l2 = Light.CreatePointLight(0.6, MakePoint(2,1,0));
+const l3 = Light.CreateDirectionalLight(0.2, MakePoint(1,4,4));
+
+Spheres = [s1,s2,s3,s4];
 Lights = [l1,l2,l3];
 
 // just a little optimization
@@ -148,7 +170,7 @@ function CanvasToViewport(Cx,Cy)
 	const Vy = Cy*ViewportWidthToCanvasHeightRatio;
 	const Vz = 1;
 
-	return {x:Vx,y:Vy,z:Vz};
+	return MakePoint(Vx,Vy,Vz);
 }
 
 const id   = ctx.createImageData(1,1);	// only do this once per page
@@ -210,8 +232,50 @@ function IntersectRaySphere(origin, direction, sphere)
 	return [t1,t2];
 }
 
+
+function ComputeLighting(point, normal, lights)
+{
+	var intensity = 0;
+
+	for( const light of lights )
+	{
+		if (light.type == LightType.Ambient)
+		{
+			intensity += light.intensity;
+		}
+		else
+		{
+			var rayOfLight;
+
+			if (light.type == LightType.Point)
+				// L = light.position - point
+				rayOfLight = VectorSubtract(light.position, point);
+			else
+				// L = light.direction
+				rayOfLight = light.direction
+
+			n_dot_l = DotProduct(normal,rayOfLight);
+
+			if (n_dot_l > 0)
+			{
+				let lengthN = VectorLength(normal);
+				let lengthL = VectorLength(rayOfLight);
+				let numerator = light.intensity * n_dot_l;
+				let denominator = lengthN*lengthL;
+				let i = numerator / denominator;
+				intensity += i;
+			}
+		}
+	}
+
+	return intensity;
+}
+
 function TraceRay(origin, direction, t_min, t_max)
 {
+	// origin: the camera effectively
+	// direction: vector, the point we are drawing the ray to
+
 	closest_t = Infinity;
 	closest_sphere = null;
 
@@ -239,32 +303,20 @@ function TraceRay(origin, direction, t_min, t_max)
 		return [255,255,255];
 	}
 
-	return closest_sphere.color;
+	//return closest_sphere.color;
+
+	// compute the intersection
+	P = VectorAdd( origin, VectorMultiplyScalar(direction, closest_t));
+	// compute sphere normal at the intersection
+	//	normal vector for a point on a sphere is the vector
+	//	from the center of the sphere to the point
+	//	then we divide by the length to make this a normal vector
+	N = VectorSubtract(P, closest_sphere.center);
+	N = N / VectorLength(N);
+
+	return closest_sphere.color * ComputeLighting( P, N, Lights );
 }
 
-function ComputeLighting(point, normal, lights)
-{
-	var i = 0;
-
-	for( const light of lights )
-	{
-		if (light.type == LightType.Ambient)
-		{
-			i += light.intensity;
-		}
-		else
-		{
-			
-			if (light.type == LightType.Point)
-				// L = light.position - point
-				L = VectorSubtract(light.position, point);
-			else
-				// L = light.direction
-				L = light.direction
-		}
-
-	}
-}
 
 function loop() 
 {
@@ -287,6 +339,11 @@ function loop()
 	// substitute P from the first equestion into the second
 	//
 
+	// xxx: add in a check to assure that all light intensities sum to 1.0
+	//		this can be added into the scene class...if you ever create that
+
+	try
+	{
 	const t0 = performance.now();
 
 	for ( x = -Cw/2; x < Cw/2; x++)
@@ -306,6 +363,14 @@ function loop()
 	console.log(`Call to doSomething took ${t1 - t0} milliseconds.`);
 	const div = document.getElementById("performance");
 	div.innerHTML = `Call to doSomething took ${t1 - t0} milliseconds.`;
+	}
+	catch(error)
+	{
+		const div = document.getElementById("performance");
+		div.innerHTML = "error rendering: "+error;
+
+		throw error;
+	}
 }
 
 function assert( predicate, description )
@@ -319,11 +384,6 @@ function test_DotProduct()
 {
 	const result1 = DotProduct(MakePoint(0,0,0), MakePoint(0,0,0));
 	if (result1 != 0) throw "error";
-}
-
-function PointsAreEqual(p1,p2)
-{
-	return p1.x === p2.x && p1.y === p2.y && p1.z === p2.z;
 }
 
 function test_LightCreation()
@@ -351,13 +411,35 @@ function test_LightCreation()
 	assert( PointsAreEqual(l3.direction,MakePoint(1,2,3)), "directional direction not null");
 }
 
+function test_VectorLength()
+{
+	var vector = MakePoint(0,0,0);
+	assert( VectorLength(vector) === 0, "vector (0,0,0) length not zero");	
+	var vector = MakePoint(1,0,0);
+	assert( VectorLength(vector) === 1, "vector (1,0,0) length not zero");	
+	var vector = MakePoint(0,1,0);
+	assert( VectorLength(vector) === 1, "vector (1,0,0) length not zero");	
+	var vector = MakePoint(0,0,1);
+	assert( VectorLength(vector) === 1, "vector (1,0,0) length not zero");	
+}
+
+function test_VectorMultiplyScalar()
+{
+	var vector = MakePoint(1,2,3);
+	var expected = MakePoint(2,4,6);
+	var actual = VectorMultiplyScalar(vector,2);
+
+	assert( PointsAreEqual(expected,actual), "didn't scalar multiply correctly");
+}
 
 function RunTests()
 {
 	try
 	{
 		test_DotProduct();
+		test_VectorLength();
 		test_LightCreation();
+		test_VectorMultiplyScalar();
 	}
 	catch(error)
 	{
@@ -374,4 +456,9 @@ const ready = RunTests();
 
 if (ready) loop();
 
-
+// Tasks
+// [ ] create tesst for MakePoint
+// [ ] create tests for PointsAreEqual
+// [ ] create tests for ComputeLighting
+// [ ] create tests for VectorAdd
+// [ ] create tests for VectorSubtract
