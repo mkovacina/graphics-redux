@@ -43,6 +43,8 @@ const ctx = canvas.getContext('2d');
 const width = canvas.width;//= window.innerWidth;
 const height = canvas.height;// = window.innerHeight;
 
+function MakePoint(x,y,z) { return { x:x, y:y, z:z } }
+
 // from the gabrielgambetta.com resource
 // implement a double-buffered approach
 // remember this from Java...
@@ -68,6 +70,49 @@ class Sphere
 	}
 }
 
+// https://stijndewitt.com/2014/01/26/enums-in-javascript/
+const LightType = 
+{
+	Unknown: 0,
+	Ambient: 1,
+	Point: 2,
+	Directional: 3,
+};
+
+class Light
+{
+	type = LightType.Unknown;
+	intensity = 0;
+	position = null;
+	direction = null;
+
+	static CreateAmbientLight(intensity)
+	{
+		var light = new Light();
+		light.type = LightType.Ambient;
+		light.intensity = intensity;
+		return light;
+	}
+
+	static CreatePointLight(intensity,position)
+	{
+		var light = new Light();
+		light.type = LightType.Point;
+		light.intensity = intensity;
+		light.position = position;
+		return light;
+	}
+
+	static CreateDirectionalLight(intensity,direction)
+	{
+		var light = new Light();
+		light.type = LightType.Directional;
+		light.intensity = intensity;
+		light.direction = direction;
+		return light;
+	}
+}
+
 function DotProduct(a,b)
 {
 	return a.x*b.x + a.y*b.y+a.z*b.z;
@@ -83,7 +128,12 @@ const s1 = new Sphere({x:0 ,y:-1,z:3}, 1, [255,0  ,0  ]);
 const s2 = new Sphere({x:0 ,y:0 ,z:5}, 1, [0  ,0  ,255]);
 const s3 = new Sphere({x:-1,y:0 ,z:4}, 1, [0  ,255,0  ]);
 
+const l1 = new Light(LightType.Ambient, 0.2);
+const l2 = new Light(LightType.Point, 0.6, MakePoint(2,1,0));
+const l3 = new Light(LightType.Directional, 0.2, MakePoint(1,4,4));
+
 Spheres = [s1,s2,s3];
+Lights = [l1,l2,l3];
 
 // just a little optimization
 // why calculate this for every invocation
@@ -192,6 +242,30 @@ function TraceRay(origin, direction, t_min, t_max)
 	return closest_sphere.color;
 }
 
+function ComputeLighting(point, normal, lights)
+{
+	var i = 0;
+
+	for( const light of lights )
+	{
+		if (light.type == LightType.Ambient)
+		{
+			i += light.intensity;
+		}
+		else
+		{
+			
+			if (light.type == LightType.Point)
+				// L = light.position - point
+				L = VectorSubtract(light.position, point);
+			else
+				// L = light.direction
+				L = light.direction
+		}
+
+	}
+}
+
 function loop() 
 {
 	// rays start from the camera (O) and go through a section of the viewport
@@ -234,23 +308,61 @@ function loop()
 	div.innerHTML = `Call to doSomething took ${t1 - t0} milliseconds.`;
 }
 
-function MakePoint(x,y,z) { return { x:x, y:y, z:z } }
+function assert( predicate, description )
+{
+	if (predicate) return;
+	console.assert(predicate, description);
+	throw description;
+}
+
 function test_DotProduct()
 {
 	const result1 = DotProduct(MakePoint(0,0,0), MakePoint(0,0,0));
 	if (result1 != 0) throw "error";
 }
 
+function PointsAreEqual(p1,p2)
+{
+	return p1.x === p2.x && p1.y === p2.y && p1.z === p2.z;
+}
+
+function test_LightCreation()
+{
+	// as needed in the future, adjust the intensity comparisons to account
+	// for numerical error
+	var l1 = Light.CreateAmbientLight(0.2);
+	assert( l1.type == LightType.Ambient, "wrong ambient light type" );
+	assert( l1.intensity == 0.2, "wrong ambient intensity");
+	assert( l1.position === null, "ambient position not null");
+	assert( l1.direction === null, "ambient direction not null");
+
+	var l2 = Light.CreatePointLight(0.2, MakePoint(2,1,0));
+	assert( l2.type == LightType.Point, "wrong point light type" );
+	assert( l2.intensity == 0.2, "wrong point intensity");
+	assert( l2.position !== null, "point position is null");
+	assert( PointsAreEqual(l2.position, MakePoint(2,1,0)), "point position not correct");
+	assert( l2.direction === null, "point direction not null");
+
+	var l3 = Light.CreateDirectionalLight(0.2, MakePoint(1,2,3));
+	assert( l3.type == LightType.Directional, "wrong directional light type" );
+	assert( l3.intensity == 0.2, "wrong directional intensity");
+	assert( l3.position === null, "directional position not null");
+	assert( l3.direction !== null, "directional direction is null");
+	assert( PointsAreEqual(l3.direction,MakePoint(1,2,3)), "directional direction not null");
+}
+
+
 function RunTests()
 {
 	try
 	{
 		test_DotProduct();
+		test_LightCreation();
 	}
-	catch
+	catch(error)
 	{
 		const div = document.getElementById("performance");
-		div.innerHTML = "error running tests";
+		div.innerHTML = "error running tests: "+error;
 		return false;
 	}
 
