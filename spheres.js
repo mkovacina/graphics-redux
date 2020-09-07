@@ -62,11 +62,12 @@ const O = MakePoint(0,0,0);
 
 class Sphere
 {
-	constructor(center,radius,color)
+	constructor(center,radius,color,specular)
 	{
 		this.center = center;
 		this.radius = radius;
 		this.color = color;
+		this.specular = specular;
 	}
 }
 
@@ -145,10 +146,10 @@ function VectorMultiplyScalar(v,c)
 
 // xxx: replace the color array with a color class??
 //      everything isn't "a point"
-const s1 = new Sphere(MakePoint(0 ,-1,3), 1,       [255,0  ,0  ]);
-const s2 = new Sphere(MakePoint(0 ,0 ,5), 1,       [0  ,0  ,255]);
-const s3 = new Sphere(MakePoint(-1,0 ,4), 1,       [0  ,255,0  ]);
-const s4 = new Sphere(MakePoint(0,-5001 ,0), 5000, [255  ,255,0  ]);
+const s1 = new Sphere(MakePoint(0 ,-1,3), 1,       [255,0  ,0  ], 500 ); // shiny
+const s2 = new Sphere(MakePoint(0 ,0 ,5), 1,       [0  ,0  ,255], 500 ); // shiny
+const s3 = new Sphere(MakePoint(-1,0 ,4), 1,       [0  ,255,0  ], 10  ); // somewhat shiny
+const s4 = new Sphere(MakePoint(0,-5001 ,0), 5000, [255,255,0  ], 1000); // very shiny
 
 const l1 = Light.CreateAmbientLight(0.2);
 const l2 = Light.CreatePointLight(0.6, MakePoint(2,1,0));
@@ -233,7 +234,7 @@ function IntersectRaySphere(origin, direction, sphere)
 }
 
 
-function ComputeLighting(point, normal, lights)
+function ComputeLighting(point, normal, viewingDirection, specularity, lights)
 {
 	var intensity = 0;
 
@@ -265,10 +266,27 @@ function ComputeLighting(point, normal, lights)
 				let i = numerator / denominator;
 				intensity += i;
 			}
+
+			// xxx: what if just less than 0?
+			if ( s != -1 )
+			{
+				var a = 2*DotProduct(normal, rayOfLight);
+				var b = VectorMultiplyScalar(normal,2);
+				var reflectedDirection = VectorSubtract(b,rayOfLight);
+				var r_dot_v = VectorDot(reflectedDirection, viewingDirection);
+				if (r_dot_v > 0)
+				{
+					// adding even more?
+					// would have thought that this just got computed for whatever component of
+					// intensity was added regardless of the type of light
+					intensity += light.intensity*Math.pow(r_dot_v/VectorLength(reflectedDirection)*VectorLength(viewingDirection),specularity);
+				}
+			}
 		}
 	}
+}
 
-	return intensity;
+return intensity;
 }
 
 function TraceRay(origin, direction, t_min, t_max)
@@ -453,7 +471,9 @@ function test_ComputeLighting()
 		let light1 = Light.CreateAmbientLight(0.1);
 		let p = MakePoint(0,0,0);
 		let n = MakePoint(0,0,0);
-		let actual = ComputeLighting(p,n,[light1]);
+		let v = MakePoint(0,0,0);
+		let s = -1;
+		let actual = ComputeLighting(p,n,[light1],v,s);
 		let expected = 0.1;
 		assert( expected === actual, "failed basic ambient light computation" );
 	}
@@ -462,7 +482,9 @@ function test_ComputeLighting()
 		let light1 = Light.CreatePointLight(0.1, MakePoint(1,1,1));
 		let p = MakePoint(0,0,0);
 		let n = MakePoint(1,1,1);
-		let actual = ComputeLighting(p,n,[light1]);
+		let v = MakePoint(0,0,0);
+		let s = -1;
+		let actual = ComputeLighting(p,n,[light1],v,s);
 		let expected = 0.1000;
 		let difference = Math.abs(expected-actual);
 		assert( difference < delta, "failed basic point light computation" );
@@ -472,19 +494,37 @@ function test_ComputeLighting()
 		let light1 = Light.CreateDirectionalLight(0.1, MakePoint(1,1,1));
 		let p = MakePoint(0,0,0);
 		let n = MakePoint(1,1,1);
-		let actual = ComputeLighting(p,n,[light1]);
+		let v = MakePoint(0,0,0);
+		let s = -1;
+		let actual = ComputeLighting(p,n,[light1],v,s);
 		let expected = 0.1000;
 		let difference = Math.abs(expected-actual);
 		assert( difference  < delta, "failed basic directional light computation" );
 	}
-	// basic combined
+	// basic combined, no specular reflection
 	{
 		let light1 = Light.CreatePointLight(0.1, MakePoint(1,1,1));
 		let light2 = Light.CreatePointLight(0.1, MakePoint(1,1,1));
 		let light3 = Light.CreateDirectionalLight(0.1, MakePoint(1,1,1));
 		let p = MakePoint(0,0,0);
 		let n = MakePoint(1,1,1);
-		let actual = ComputeLighting(p,n,[light1,light2,light3]);
+		let v = MakePoint(0,0,0);
+		let s = -1;
+		let actual = ComputeLighting(p,n,[light1,light2,light3],v,s);
+		let expected = 0.3;
+		let difference = Math.abs(expected-actual);
+		assert( difference < delta, "failed basic combined light computation" );
+	}
+	// basic combined, with specular reflection
+	{
+		let light1 = Light.CreatePointLight(0.1, MakePoint(1,1,1));
+		let light2 = Light.CreatePointLight(0.1, MakePoint(1,1,1));
+		let light3 = Light.CreateDirectionalLight(0.1, MakePoint(1,1,1));
+		let p = MakePoint(0,0,0);
+		let n = MakePoint(1,1,1);
+		let v = MakePoint(1,1,1);
+		let s = -1;
+		let actual = ComputeLighting(p,n,[light1,light2,light3],v,s);
 		let expected = 0.3;
 		let difference = Math.abs(expected-actual);
 		assert( difference < delta, "failed basic combined light computation" );
