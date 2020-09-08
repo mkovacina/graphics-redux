@@ -73,12 +73,12 @@ class Sphere
 
 // https://stijndewitt.com/2014/01/26/enums-in-javascript/
 const LightType = 
-{
-	Unknown: 0,
-	Ambient: 1,
-	Point: 2,
-	Directional: 3,
-};
+	{
+		Unknown: 0,
+		Ambient: 1,
+		Point: 2,
+		Directional: 3,
+	};
 
 class Light
 {
@@ -182,12 +182,12 @@ function DrawPixel(Cx,Cy,color)
 	// xxx: later optimize with https://stackoverflow.com/questions/4899799/whats-the-best-way-to-set-a-single-pixel-in-an-html5-canvas
 	//ctx.fillStyle = 'rgba(0,0,0,0.25)';
 	// convert from canvas to screen coordinates
-	
+
 	const sx = Cw/2 + Cx;
 	const sy = Ch/2 - Cy;
-	
+
 	if (sx < 0 || sx >= Cw || sy < 0 || sy >= Ch) return;
- 
+
 	var offset = 4*sx + canvas_pitch*sy;
 	canvas_buffer.data[offset+0] = color[0];
 	canvas_buffer.data[offset+1] = color[1];
@@ -233,6 +233,46 @@ function IntersectRaySphere(origin, direction, sphere)
 	return [t1,t2];
 }
 
+function ComputeSpecularReflectionComponent(V,N,L,s)
+{
+	// V: direction towards the camera (viewing)
+	// N: normal vector from the point P
+	// L: direction of the light ray
+	// s: specular reflection factor
+
+	// i: added intensity
+	let i = 0;
+
+	var a = 2*DotProduct(N,L);
+	var b = VectorMultiplyScalar(N,a);
+
+	// R: direction of the reflected light
+	var R = VectorSubtract(b,L);
+	var r_dot_v = DotProduct(R, V);
+	if (r_dot_v > 0)
+	{
+		// adding even more?
+		// would have thought that this just got computed for whatever component of
+		// intensity was added regardless of the type of light
+
+		//i = light.intensity*Math.pow(r_dot_v/VectorLength(reflectedDirection)*VectorLength(viewingDirection),specularity);
+		let lengthR = VectorLength(R);
+		let lengthV = VectorLength(V);
+		let denominator = lengthR * lengthV;
+		// isn't this fun
+		// let whatnowA = r_dot_v/lengthR*lengthV;
+		// let whatnowB = r_dot_v/(lengthR*lengthV);
+		//
+		// did you know, that whatnowA != whatnowB??
+		// awesome...
+		// whatnowB is the correct value AFAIK
+		i = Math.pow(r_dot_v/denominator,s);
+		//i = Math.pow(r_dot_v/lengthR*lengthV,s);
+	}
+
+	return i;
+}
+
 
 function ComputeLighting(point, normal, viewingDirection, specularity, lights)
 {
@@ -268,25 +308,14 @@ function ComputeLighting(point, normal, viewingDirection, specularity, lights)
 			}
 
 			// xxx: what if just less than 0?
-			if ( s != -1 )
+			if (specularity != -1 )
 			{
-				var a = 2*DotProduct(normal, rayOfLight);
-				var b = VectorMultiplyScalar(normal,2);
-				var reflectedDirection = VectorSubtract(b,rayOfLight);
-				var r_dot_v = VectorDot(reflectedDirection, viewingDirection);
-				if (r_dot_v > 0)
-				{
-					// adding even more?
-					// would have thought that this just got computed for whatever component of
-					// intensity was added regardless of the type of light
-					intensity += light.intensity*Math.pow(r_dot_v/VectorLength(reflectedDirection)*VectorLength(viewingDirection),specularity);
-				}
+				intensity += light.intensity * ComputeSpecularReflectionComponent(viewingDirection, normal, rayOfLight, specularity);
 			}
 		}
 	}
-}
 
-return intensity;
+	return intensity;
 }
 
 function TraceRay(origin, direction, t_min, t_max)
@@ -331,20 +360,31 @@ function TraceRay(origin, direction, t_min, t_max)
 	//	then we divide by the length to make this a normal vector
 	N = VectorSubtract(P, closest_sphere.center);
 	//N = N / VectorLength(N);
+	let x = 1.0 / VectorLength(N);
 	N = VectorMultiplyScalar(N, 1.0 / VectorLength(N));
 
-	var intensity = ComputeLighting( P, N, Lights );
+	let Dnegative = VectorMultiplyScalar(direction,-1);
+
+	var intensity = ComputeLighting( P, N, Dnegative, closest_sphere.specular, Lights );
 
 	//var color = closest_sphere.color * intensity;
 	// no mike, this isn't a real language that you are working with
 	// nor is it matlab
 	// color is 1x3 vector
-	// and javascript will gladly multiple this...
+	// and javascript will gladly multiply this...
 	// ...and give you NaN
 	// ....and you didn't write tests for TraceRay yet because......
 	var color = VectorMultiplyScalar(closest_sphere.color,intensity);
 
 	return color;
+}
+
+
+function assert( predicate, description )
+{
+	if (predicate) return;
+	console.assert(predicate, description);
+	throw description;
 }
 
 
@@ -382,13 +422,15 @@ function loop()
 			{
 				D = CanvasToViewport(x,y);
 				color = TraceRay(O,D,1,Infinity);
-				console.assert( color !== NaN, "color is bad");
+				assert( !isNaN(color[0]), "color is bad");
+				assert( !isNaN(color[1]), "color is bad");
+				assert( !isNaN(color[2]), "color is bad");
 				DrawPixel(x,y,color)
 			}
 		}
 
 		const t1 = performance.now();
-	 
+
 		ctx.putImageData(canvas_buffer, 0, 0);
 
 		console.log(`Call to doSomething took ${t1 - t0} milliseconds.`);
@@ -403,14 +445,6 @@ function loop()
 		throw error;
 	}
 }
-
-function assert( predicate, description )
-{
-	if (predicate) return;
-	console.assert(predicate, description);
-	throw description;
-}
-
 function test_DotProduct()
 {
 	const result1 = DotProduct(MakePoint(0,0,0), MakePoint(0,0,0));
@@ -466,69 +500,83 @@ function test_VectorMultiplyScalar()
 function test_ComputeLighting()
 {
 	let delta = 0.000000001
-	// basic ambient
-	{
-		let light1 = Light.CreateAmbientLight(0.1);
-		let p = MakePoint(0,0,0);
-		let n = MakePoint(0,0,0);
-		let v = MakePoint(0,0,0);
-		let s = -1;
-		let actual = ComputeLighting(p,n,[light1],v,s);
-		let expected = 0.1;
-		assert( expected === actual, "failed basic ambient light computation" );
-	}
-	// basic point 
-	{
-		let light1 = Light.CreatePointLight(0.1, MakePoint(1,1,1));
-		let p = MakePoint(0,0,0);
-		let n = MakePoint(1,1,1);
-		let v = MakePoint(0,0,0);
-		let s = -1;
-		let actual = ComputeLighting(p,n,[light1],v,s);
-		let expected = 0.1000;
-		let difference = Math.abs(expected-actual);
-		assert( difference < delta, "failed basic point light computation" );
-	}
-	// basic directional  
-	{
-		let light1 = Light.CreateDirectionalLight(0.1, MakePoint(1,1,1));
-		let p = MakePoint(0,0,0);
-		let n = MakePoint(1,1,1);
-		let v = MakePoint(0,0,0);
-		let s = -1;
-		let actual = ComputeLighting(p,n,[light1],v,s);
-		let expected = 0.1000;
-		let difference = Math.abs(expected-actual);
-		assert( difference  < delta, "failed basic directional light computation" );
-	}
-	// basic combined, no specular reflection
-	{
-		let light1 = Light.CreatePointLight(0.1, MakePoint(1,1,1));
-		let light2 = Light.CreatePointLight(0.1, MakePoint(1,1,1));
-		let light3 = Light.CreateDirectionalLight(0.1, MakePoint(1,1,1));
-		let p = MakePoint(0,0,0);
-		let n = MakePoint(1,1,1);
-		let v = MakePoint(0,0,0);
-		let s = -1;
-		let actual = ComputeLighting(p,n,[light1,light2,light3],v,s);
-		let expected = 0.3;
-		let difference = Math.abs(expected-actual);
-		assert( difference < delta, "failed basic combined light computation" );
-	}
-	// basic combined, with specular reflection
-	{
-		let light1 = Light.CreatePointLight(0.1, MakePoint(1,1,1));
-		let light2 = Light.CreatePointLight(0.1, MakePoint(1,1,1));
-		let light3 = Light.CreateDirectionalLight(0.1, MakePoint(1,1,1));
-		let p = MakePoint(0,0,0);
-		let n = MakePoint(1,1,1);
-		let v = MakePoint(1,1,1);
-		let s = -1;
-		let actual = ComputeLighting(p,n,[light1,light2,light3],v,s);
-		let expected = 0.3;
-		let difference = Math.abs(expected-actual);
-		assert( difference < delta, "failed basic combined light computation" );
-	}
+    // basic ambient
+    {
+    	let light1 = Light.CreateAmbientLight(0.1);
+    	let lights = [light1];
+    	let p = MakePoint(0,0,0);
+    	let n = MakePoint(0,0,0);
+    	let v = MakePoint(0,0,0);
+    	let s = -1;
+    	let actual = ComputeLighting(p,n,v,s,[light1]);
+    	let expected = 0.1;
+    	assert( expected === actual, "failed basic ambient light computation" );
+    }
+    // basic point 
+    {
+    	let light1 = Light.CreatePointLight(0.1, MakePoint(1,1,1));
+    	let p = MakePoint(0,0,0);
+    	let n = MakePoint(1,1,1);
+    	let v = MakePoint(0,0,0);
+    	let s = -1;
+    	let actual = ComputeLighting(p,n,v,s,[light1]);
+    	let expected = 0.1000;
+    	let difference = Math.abs(expected-actual);
+    	assert( difference < delta, "failed basic point light computation" );
+    }
+    // basic directional  
+    {
+    	let light1 = Light.CreateDirectionalLight(0.1, MakePoint(1,1,1));
+    	let p = MakePoint(0,0,0);
+    	let n = MakePoint(1,1,1);
+    	let v = MakePoint(0,0,0);
+    	let s = -1;
+    	let actual = ComputeLighting(p,n,v,s,[light1]);
+    	let expected = 0.1000;
+    	let difference = Math.abs(expected-actual);
+    	assert( difference  < delta, "failed basic directional light computation" );
+    }
+    // basic combined, no specular reflection
+    {
+    	let light1 = Light.CreatePointLight(0.1, MakePoint(1,1,1));
+    	let light2 = Light.CreatePointLight(0.1, MakePoint(1,1,1));
+    	let light3 = Light.CreateDirectionalLight(0.1, MakePoint(1,1,1));
+    	let p = MakePoint(0,0,0);
+    	let n = MakePoint(1,1,1);
+    	let v = MakePoint(0,0,0);
+    	let s = -1;
+    	let actual = ComputeLighting(p,n,v,s,[light1,light2,light3]);
+    	let expected = 0.3;
+    	let difference = Math.abs(expected-actual);
+    	assert( difference < delta, "failed basic combined light computation" );
+    }
+    // basic combined, with specular reflection
+    {
+    	let light1 = Light.CreatePointLight(0.1, MakePoint(1,1,1));
+    	let light2 = Light.CreatePointLight(0.1, MakePoint(1,1,1));
+    	let light3 = Light.CreateDirectionalLight(0.1, MakePoint(1,1,1));
+    	let p = MakePoint(0,0,0);
+    	let n = MakePoint(1,1,1);
+    	let v = MakePoint(1,1,1);
+    	let s = -1;
+    	let actual = ComputeLighting(p,n,v,s,[light1,light2,light3]);
+    	let expected = 0.3;
+    	let difference = Math.abs(expected-actual);
+    	assert( difference < delta, "failed basic combined light computation" );
+    }
+}
+
+function test_ComputeSpecularReflectionComponent()
+{
+	let V = MakePoint(1,1,1);
+	let N = MakePoint(1,1,1);
+	let L = MakePoint(1,1,1);
+	let s = 2;
+
+	let actual = ComputeSpecularReflectionComponent(V,N,L,s);
+	let expected = 1;
+
+	assert( expected === actual, "specular reflection component not computed correctly");
 }
 
 function RunTests()
@@ -540,6 +588,7 @@ function RunTests()
 		test_LightCreation();
 		test_VectorMultiplyScalar();
 		test_ComputeLighting();
+		//test_ComputeSpecularReflectionComponent();
 	}
 	catch(error)
 	{
