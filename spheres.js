@@ -1,4 +1,4 @@
-
+"use strict";
 // assumption: fixed viewing position
 // assumption: fixed camera orientation
 // assumption: camera is located at (0,0,0)
@@ -116,31 +116,37 @@ class Light
 
 function PointsAreEqual(p1,p2)
 {
+	"use strict";
 	return p1[0] === p2[0] && p1[1] === p2[1] && p1[2] === p2[2];
 }
 
 function DotProduct(a,b)
 {
+	"use strict";
 	return a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
 }
 
 function VectorLength(x)
 {
+	"use strict";
 	return Math.sqrt(DotProduct(x,x));
 }
 
 function VectorSubtract(a,b)
 {
+	"use strict";
 	return MakePoint(a[0]-b[0], a[1]-b[1], a[2]-b[2]);
 }
 
 function VectorAdd(a,b)
 {
+	"use strict";
 	return MakePoint(a[0]+b[0], a[1]+b[1], a[2]+b[2]);
 }
 
 function VectorMultiplyScalar(v,c)
 {
+	"use strict";
 	return MakePoint(v[0]*c, v[1]*c, v[2]*c);
 }
 
@@ -155,8 +161,8 @@ const l1 = Light.CreateAmbientLight(0.2);
 const l2 = Light.CreatePointLight(0.6, MakePoint(2,1,0));
 const l3 = Light.CreateDirectionalLight(0.2, MakePoint(1,4,4));
 
-Spheres = [s1,s2,s3,s4];
-Lights = [l1,l2,l3];
+const Spheres = [s1,s2,s3,s4];
+const Lights = [l1,l2,l3];
 
 // just a little optimization
 // why calculate this for every invocation
@@ -167,6 +173,8 @@ const ViewportWidthToCanvasHeightRatio = Vh/Ch;
 
 function CanvasToViewport(Cx,Cy)
 {
+	"use strict";
+
 	const Vx = Cx*ViewportWidthToCanvasWidthRatio;
 	const Vy = Cy*ViewportWidthToCanvasHeightRatio;
 	const Vz = 1;
@@ -179,6 +187,8 @@ const data = id.data;						// only do this once per page
 
 function DrawPixel(Cx,Cy,color)
 {
+	"use strict";
+
 	// xxx: later optimize with https://stackoverflow.com/questions/4899799/whats-the-best-way-to-set-a-single-pixel-in-an-html5-canvas
 	//ctx.fillStyle = 'rgba(0,0,0,0.25)';
 	// convert from canvas to screen coordinates
@@ -188,7 +198,7 @@ function DrawPixel(Cx,Cy,color)
 
 	if (sx < 0 || sx >= Cw || sy < 0 || sy >= Ch) return;
 
-	var offset = 4*sx + canvas_pitch*sy;
+	const offset = 4*sx + canvas_pitch*sy;
 	canvas_buffer.data[offset+0] = color[0];
 	canvas_buffer.data[offset+1] = color[1];
 	canvas_buffer.data[offset+2] = color[2];
@@ -205,6 +215,8 @@ function DrawPixel(Cx,Cy,color)
 
 function IntersectRaySphere(origin, direction, sphere)
 {
+	"use strict";
+
 	const C = sphere.center;
 	const r = sphere.radius;
 	// O(origin) - C
@@ -235,6 +247,8 @@ function IntersectRaySphere(origin, direction, sphere)
 
 function ComputeSpecularReflectionComponent(V,N,L,s)
 {
+	"use strict";
+
 	// V: direction towards the camera (viewing)
 	// N: normal vector from the point P
 	// L: direction of the light ray
@@ -243,12 +257,13 @@ function ComputeSpecularReflectionComponent(V,N,L,s)
 	// i: added intensity
 	let i = 0;
 
-	var a = 2*DotProduct(N,L);
-	var b = VectorMultiplyScalar(N,a);
+	const a = 2*DotProduct(N,L);
+	const b = VectorMultiplyScalar(N,a);
 
 	// R: direction of the reflected light
-	var R = VectorSubtract(b,L);
-	var r_dot_v = DotProduct(R, V);
+	const R = VectorSubtract(b,L);
+	const r_dot_v = DotProduct(R, V);
+
 	if (r_dot_v > 0)
 	{
 		// adding even more?
@@ -256,9 +271,9 @@ function ComputeSpecularReflectionComponent(V,N,L,s)
 		// intensity was added regardless of the type of light
 
 		//i = light.intensity*Math.pow(r_dot_v/VectorLength(reflectedDirection)*VectorLength(viewingDirection),specularity);
-		let lengthR = VectorLength(R);
-		let lengthV = VectorLength(V);
-		let denominator = lengthR * lengthV;
+		const lengthR = VectorLength(R);
+		const lengthV = VectorLength(V);
+		const denominator = lengthR * lengthV;
 		// isn't this fun
 		// let whatnowA = r_dot_v/lengthR*lengthV;
 		// let whatnowB = r_dot_v/(lengthR*lengthV);
@@ -276,7 +291,9 @@ function ComputeSpecularReflectionComponent(V,N,L,s)
 
 function ComputeLighting(point, normal, viewingDirection, specularity, lights)
 {
-	var intensity = 0;
+	"use strict";
+
+	let intensity = 0;
 
 	for( const light of lights )
 	{
@@ -286,7 +303,7 @@ function ComputeLighting(point, normal, viewingDirection, specularity, lights)
 		}
 		else
 		{
-			var rayOfLight;
+			let rayOfLight;
 
 			if (light.type == LightType.Point)
 				// L = light.position - point
@@ -295,15 +312,15 @@ function ComputeLighting(point, normal, viewingDirection, specularity, lights)
 				// L = light.direction
 				rayOfLight = light.direction
 
-			n_dot_l = DotProduct(normal,rayOfLight);
+			const n_dot_l = DotProduct(normal,rayOfLight);
 
 			if (n_dot_l > 0)
 			{
-				let lengthN = VectorLength(normal);
-				let lengthL = VectorLength(rayOfLight);
-				let numerator = light.intensity * n_dot_l;
-				let denominator = lengthN*lengthL;
-				let i = numerator / denominator;
+				const lengthN = VectorLength(normal);
+				const lengthL = VectorLength(rayOfLight);
+				const numerator = light.intensity * n_dot_l;
+				const denominator = lengthN*lengthL;
+				const i = numerator / denominator;
 				intensity += i;
 			}
 
@@ -320,19 +337,21 @@ function ComputeLighting(point, normal, viewingDirection, specularity, lights)
 
 function TraceRay(origin, direction, t_min, t_max)
 {
+	"use strict";
+
 	// origin: the camera effectively
 	// direction: vector, the point we are drawing the ray to
 
-	closest_t = Infinity;
-	closest_sphere = null;
+	let closest_t = Infinity;
+	let closest_sphere = null;
 
 	// xxx: add a scene object and add spheres to it later
 	for( const sphere of Spheres )
 	{
-		solutions = IntersectRaySphere(origin, direction, sphere);
+		const solutions = IntersectRaySphere(origin, direction, sphere);
 
-		t1 = solutions[0];
-		t2 = solutions[1];
+		const t1 = solutions[0];
+		const t2 = solutions[1];
 
 		if ( t1 > t_min && t1 < t_max && t1 < closest_t )
 		{
@@ -345,6 +364,7 @@ function TraceRay(origin, direction, t_min, t_max)
 			closest_sphere = sphere;
 		}
 	}
+
 	if (closest_sphere === null)
 	{
 		return [255,255,255];
@@ -353,19 +373,19 @@ function TraceRay(origin, direction, t_min, t_max)
 	//return closest_sphere.color;
 
 	// compute the intersection
-	P = VectorAdd( origin, VectorMultiplyScalar(direction, closest_t));
+	const P = VectorAdd( origin, VectorMultiplyScalar(direction, closest_t));
 	// compute sphere normal at the intersection
 	//	normal vector for a point on a sphere is the vector
 	//	from the center of the sphere to the point
 	//	then we divide by the length to make this a normal vector
-	N = VectorSubtract(P, closest_sphere.center);
+	let N = VectorSubtract(P, closest_sphere.center);
 	//N = N / VectorLength(N);
-	let x = 1.0 / VectorLength(N);
+	const  x = 1.0 / VectorLength(N);
 	N = VectorMultiplyScalar(N, 1.0 / VectorLength(N));
 
-	let Dnegative = VectorMultiplyScalar(direction,-1);
+	const Dnegative = VectorMultiplyScalar(direction,-1);
 
-	var intensity = ComputeLighting( P, N, Dnegative, closest_sphere.specular, Lights );
+	const intensity = ComputeLighting( P, N, Dnegative, closest_sphere.specular, Lights );
 
 	//var color = closest_sphere.color * intensity;
 	// no mike, this isn't a real language that you are working with
@@ -374,7 +394,7 @@ function TraceRay(origin, direction, t_min, t_max)
 	// and javascript will gladly multiply this...
 	// ...and give you NaN
 	// ....and you didn't write tests for TraceRay yet because......
-	var color = VectorMultiplyScalar(closest_sphere.color,intensity);
+	const color = VectorMultiplyScalar(closest_sphere.color,intensity);
 
 	return color;
 }
@@ -382,6 +402,7 @@ function TraceRay(origin, direction, t_min, t_max)
 
 function assert( predicate, description )
 {
+	"use strict";
 	if (predicate) return;
 	console.assert(predicate, description);
 	throw description;
@@ -390,6 +411,8 @@ function assert( predicate, description )
 
 function loop() 
 {
+	"use strict";
+
 	// rays start from the camera (O) and go through a section of the viewport
 	// setup as a parameter equation w.r.t. 't' to define points on the ray
 	// P = O + t(V-O)
@@ -416,12 +439,12 @@ function loop()
 	{
 		const t0 = performance.now();
 
-		for ( x = -Cw/2; x < Cw/2; x++)
+		for ( let x = -Cw/2; x < Cw/2; x++)
 		{
-			for( y = -Ch/2; y < Ch/2; y++ )
+			for( let y = -Ch/2; y < Ch/2; y++ )
 			{
-				D = CanvasToViewport(x,y);
-				color = TraceRay(O,D,1,Infinity);
+				let D = CanvasToViewport(x,y);
+				let color = TraceRay(O,D,1,Infinity);
 				assert( !isNaN(color[0]), "color is bad");
 				assert( !isNaN(color[1]), "color is bad");
 				assert( !isNaN(color[2]), "color is bad");
@@ -445,14 +468,19 @@ function loop()
 		throw error;
 	}
 }
+
 function test_DotProduct()
 {
+	"use strict";
+
 	const result1 = DotProduct(MakePoint(0,0,0), MakePoint(0,0,0));
 	if (result1 != 0) throw "error";
 }
 
 function test_LightCreation()
 {
+	"use strict";
+
 	// as needed in the future, adjust the intensity comparisons to account
 	// for numerical error
 	var l1 = Light.CreateAmbientLight(0.2);
@@ -478,6 +506,7 @@ function test_LightCreation()
 
 function test_VectorLength()
 {
+	"use strict";
 	var vector = MakePoint(0,0,0);
 	assert( VectorLength(vector) === 0, "vector (0,0,0) length not zero");	
 	var vector = MakePoint(1,0,0);
@@ -490,6 +519,7 @@ function test_VectorLength()
 
 function test_VectorMultiplyScalar()
 {
+	"use strict";
 	var vector = MakePoint(1,2,3);
 	var expected = MakePoint(2,4,6);
 	var actual = VectorMultiplyScalar(vector,2);
@@ -499,6 +529,8 @@ function test_VectorMultiplyScalar()
 
 function test_ComputeLighting()
 {
+	"use strict";
+
 	let delta = 0.000000001
     // basic ambient
     {
@@ -568,6 +600,8 @@ function test_ComputeLighting()
 
 function test_ComputeSpecularReflectionComponent()
 {
+	"use strict";
+
 	let V = MakePoint(1,1,1);
 	let N = MakePoint(1,1,1);
 	let L = MakePoint(1,1,1);
@@ -581,6 +615,7 @@ function test_ComputeSpecularReflectionComponent()
 
 function RunTests()
 {
+	"use strict";
 	try
 	{
 		test_DotProduct();
@@ -588,7 +623,7 @@ function RunTests()
 		test_LightCreation();
 		test_VectorMultiplyScalar();
 		test_ComputeLighting();
-		//test_ComputeSpecularReflectionComponent();
+		test_ComputeSpecularReflectionComponent();
 	}
 	catch(error)
 	{
