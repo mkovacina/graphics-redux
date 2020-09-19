@@ -153,8 +153,8 @@ function VectorMultiplyScalar(v,c)
 // xxx: replace the color array with a color class??
 //      everything isn't "a point"
 const s1 = new Sphere(MakePoint(0 ,-1,3), 1,       [255,0  ,0  ], 500 ); // shiny
-const s2 = new Sphere(MakePoint(0 ,0 ,5), 1,       [0  ,0  ,255], 500 ); // shiny
-const s3 = new Sphere(MakePoint(-1,0 ,4), 1,       [0  ,255,0  ], 10  ); // somewhat shiny
+const s2 = new Sphere(MakePoint(2 ,0 ,4), 1,       [0  ,0  ,255], 500 ); // shiny
+const s3 = new Sphere(MakePoint(-2,0 ,4), 1,       [0  ,255,0  ], 10  ); // somewhat shiny
 const s4 = new Sphere(MakePoint(0,-5001 ,0), 5000, [255,255,0  ], 1000); // very shiny
 
 const l1 = Light.CreateAmbientLight(0.2);
@@ -288,8 +288,39 @@ function ComputeSpecularReflectionComponent(V,N,L,s)
 	return i;
 }
 
+function findClosestSphere(spheres,O,D,t_min,t_max)
+{
+	"use strict";
 
-function ComputeLighting(point, normal, viewingDirection, specularity, lights)
+	// spheres:	the list of spheres in the scene
+	//		O:	the origin point to compute the intersection from 
+	//		D:	the direction of the ray for look for intersections
+	//	t_min:	the minimum distance away an object can be
+	//	t_max:	the maximum distance away an object can be
+	
+	let closest_t = Infinity;
+	let closest_sphere = null;
+
+	for( const sphere of spheres )
+	{
+		const [t1,t2] = IntersectRaySphere(O, D, sphere);
+
+		if ( t1 > t_min && t1 < t_max && t1 < closest_t )
+		{
+			closest_t = t1;
+			closest_sphere = sphere;
+		}
+		if ( t2 > t_min && t2 < t_max && t2 < closest_t )
+		{
+			closest_t = t2;
+			closest_sphere = sphere;
+		}
+	}
+
+	return [closest_t,closest_sphere];
+}
+
+function ComputeLighting(point, normal, viewingDirection, specularity, lights, spheres)
 {
 	"use strict";
 
@@ -297,6 +328,10 @@ function ComputeLighting(point, normal, viewingDirection, specularity, lights)
 
 	for( const light of lights )
 	{
+		// ambient lighting is the same at all points
+		// an all encompassing light
+		// there can be no shadow cast by an ambient light
+		// as a shadow is not created nor cast but is a void from light
 		if (light.type == LightType.Ambient)
 		{
 			intensity += light.intensity;
@@ -304,14 +339,31 @@ function ComputeLighting(point, normal, viewingDirection, specularity, lights)
 		else
 		{
 			let rayOfLight;
+			let t_max;
 
 			if (light.type == LightType.Point)
+			{
 				// L = light.position - point
 				rayOfLight = VectorSubtract(light.position, point);
+				t_max = 1.0;
+			}
 			else
+			{
 				// L = light.direction
 				rayOfLight = light.direction
+				t_max = Infinity;
+			}
 
+			// my problem...the findClosestSphere is finding way too many shadows
+			//
+			// check for shadows
+			// xxx: optimization, don't find closest, find any
+			const [shadow_t, shadow_sphere] = findClosestSphere(spheres,point,rayOfLight,.001, t_max);
+
+			if (shadow_sphere !== null)
+				continue;
+
+			// diffuse light
 			const n_dot_l = DotProduct(normal,rayOfLight);
 
 			if (n_dot_l > 0)
@@ -324,6 +376,7 @@ function ComputeLighting(point, normal, viewingDirection, specularity, lights)
 				intensity += i;
 			}
 
+			// specular light
 			// xxx: what if just less than 0?
 			if (specularity != -1 )
 			{
@@ -342,28 +395,7 @@ function TraceRay(origin, direction, t_min, t_max)
 	// origin: the camera effectively
 	// direction: vector, the point we are drawing the ray to
 
-	let closest_t = Infinity;
-	let closest_sphere = null;
-
-	// xxx: add a scene object and add spheres to it later
-	for( const sphere of Spheres )
-	{
-		const solutions = IntersectRaySphere(origin, direction, sphere);
-
-		const t1 = solutions[0];
-		const t2 = solutions[1];
-
-		if ( t1 > t_min && t1 < t_max && t1 < closest_t )
-		{
-			closest_t = t1;
-			closest_sphere = sphere;
-		}
-		if ( t2 > t_min && t2 < t_max && t2 < closest_t )
-		{
-			closest_t = t2;
-			closest_sphere = sphere;
-		}
-	}
+	const [closest_t,closest_sphere] = findClosestSphere(Spheres,origin,direction,t_min, t_max) 
 
 	if (closest_sphere === null)
 	{
@@ -385,7 +417,7 @@ function TraceRay(origin, direction, t_min, t_max)
 
 	const Dnegative = VectorMultiplyScalar(direction,-1);
 
-	const intensity = ComputeLighting( P, N, Dnegative, closest_sphere.specular, Lights );
+	const intensity = ComputeLighting( P, N, Dnegative, closest_sphere.specular, Lights, Spheres );
 
 	//var color = closest_sphere.color * intensity;
 	// no mike, this isn't a real language that you are working with
@@ -408,66 +440,6 @@ function assert( predicate, description )
 	throw description;
 }
 
-
-function loop() 
-{
-	"use strict";
-
-	// rays start from the camera (O) and go through a section of the viewport
-	// setup as a parameter equation w.r.t. 't' to define points on the ray
-	// P = O + t(V-O)
-	// (V-O) is the direction of the ray, noted vD
-	// P = O +t*vD
-	//
-	// if t < 0, that is behind the camera
-	// if t in [0,1], that is between the camera and the viewport
-	// if t > 1, that is in the scene
-	//
-	// to define the points on a sphere, assume sphere with center C and radius r
-	// then, if P is a point on the sphere, the distance between the C and P is r.
-	// |P-C|=r
-	// sqrt(<P-C,P-c>)=r where <x,y> denotes inner product
-	// <P-C,P-C>=r^2
-	//
-	// substitute P from the first equestion into the second
-	//
-
-	// xxx: add in a check to assure that all light intensities sum to 1.0
-	//		this can be added into the scene class...if you ever create that
-
-	try
-	{
-		const t0 = performance.now();
-
-		for ( let x = -Cw/2; x < Cw/2; x++)
-		{
-			for( let y = -Ch/2; y < Ch/2; y++ )
-			{
-				let D = CanvasToViewport(x,y);
-				let color = TraceRay(O,D,1,Infinity);
-				assert( !isNaN(color[0]), "color is bad");
-				assert( !isNaN(color[1]), "color is bad");
-				assert( !isNaN(color[2]), "color is bad");
-				DrawPixel(x,y,color)
-			}
-		}
-
-		const t1 = performance.now();
-
-		ctx.putImageData(canvas_buffer, 0, 0);
-
-		console.log(`Call to doSomething took ${t1 - t0} milliseconds.`);
-		const div = document.getElementById("performance");
-		div.innerHTML = `Call to doSomething took ${t1 - t0} milliseconds.`;
-	}
-	catch(error)
-	{
-		const div = document.getElementById("performance");
-		div.innerHTML = "error rendering: "+error;
-
-		throw error;
-	}
-}
 
 function test_DotProduct()
 {
@@ -540,7 +512,7 @@ function test_ComputeLighting()
     	let n = MakePoint(0,0,0);
     	let v = MakePoint(0,0,0);
     	let s = -1;
-    	let actual = ComputeLighting(p,n,v,s,[light1]);
+    	let actual = ComputeLighting(p,n,v,s,[light1],[]);
     	let expected = 0.1;
     	assert( expected === actual, "failed basic ambient light computation" );
     }
@@ -551,7 +523,7 @@ function test_ComputeLighting()
     	let n = MakePoint(1,1,1);
     	let v = MakePoint(0,0,0);
     	let s = -1;
-    	let actual = ComputeLighting(p,n,v,s,[light1]);
+    	let actual = ComputeLighting(p,n,v,s,[light1],[]);
     	let expected = 0.1000;
     	let difference = Math.abs(expected-actual);
     	assert( difference < delta, "failed basic point light computation" );
@@ -563,7 +535,7 @@ function test_ComputeLighting()
     	let n = MakePoint(1,1,1);
     	let v = MakePoint(0,0,0);
     	let s = -1;
-    	let actual = ComputeLighting(p,n,v,s,[light1]);
+    	let actual = ComputeLighting(p,n,v,s,[light1],[]);
     	let expected = 0.1000;
     	let difference = Math.abs(expected-actual);
     	assert( difference  < delta, "failed basic directional light computation" );
@@ -577,7 +549,7 @@ function test_ComputeLighting()
     	let n = MakePoint(1,1,1);
     	let v = MakePoint(0,0,0);
     	let s = -1;
-    	let actual = ComputeLighting(p,n,v,s,[light1,light2,light3]);
+    	let actual = ComputeLighting(p,n,v,s,[light1,light2,light3],[]);
     	let expected = 0.3;
     	let difference = Math.abs(expected-actual);
     	assert( difference < delta, "failed basic combined light computation" );
@@ -590,9 +562,22 @@ function test_ComputeLighting()
     	let p = MakePoint(0,0,0);
     	let n = MakePoint(1,1,1);
     	let v = MakePoint(1,1,1);
-    	let s = -1;
-    	let actual = ComputeLighting(p,n,v,s,[light1,light2,light3]);
-    	let expected = 0.3;
+    	let s = 0;
+    	let actual = ComputeLighting(p,n,v,s,[light1,light2,light3],[]);
+    	let expected = 0.6;
+    	let difference = Math.abs(expected-actual);
+    	assert( difference < delta, `failed basic combined light computation with specular expected: ${expected}, actual ${actual} ` );
+    }
+    // basic directional with sphere
+    {
+    	let light3 = Light.CreateDirectionalLight(0.1, MakePoint(1,1,1));
+    	let p = MakePoint(0,0,0);
+    	let n = MakePoint(1,1,1);
+    	let v = MakePoint(1,1,1);
+    	let s = 1;
+		const s1 = new Sphere(MakePoint(.5,.5,.5), 1,       [255,0  ,0  ], 500 ); // shiny
+    	let actual = ComputeLighting(p,n,v,s,[light3],[s1]);
+    	let expected = 0.0;
     	let difference = Math.abs(expected-actual);
     	assert( difference < delta, "failed basic combined light computation" );
     }
@@ -613,6 +598,32 @@ function test_ComputeSpecularReflectionComponent()
 	assert( expected === actual, "specular reflection component not computed correctly");
 }
 
+function test_findClosestSphere()
+{
+	"use strict";
+
+	// so, trying to keep the math simple and keep everything on the [1,1,1] vector.
+	// initially had spheres with a radius of 1...so, yeah, while the code worked,
+	// it wasn't the inuitive assertion result I was looking for, so shrinking the
+	// radius to .1 makes the test easier to read.
+	
+	const s1 = new Sphere(MakePoint(.50,.50,.50), .1, [255,0  ,0  ], 1 ); // shiny
+	const s2 = new Sphere(MakePoint(.25,.25,.25), .1, [0  ,0  ,255], 2 ); // shiny
+	const s3 = new Sphere(MakePoint(.75,.75,.75), .1, [0  ,255,0  ], 3  ); // somewhat shiny
+
+	const spheres = [s1,s2,s3];
+
+	const O = MakePoint(0,0,0);
+	const D = [1,1,1];
+	const t_min = 0.001;
+	const t_max = 1;
+
+	const [t,sphere] = findClosestSphere(spheres,O,D,t_min,t_max);
+
+	assert( sphere.specular == 2, "found the wrong sphere");
+
+}
+
 function RunTests()
 {
 	"use strict";
@@ -624,6 +635,7 @@ function RunTests()
 		test_VectorMultiplyScalar();
 		test_ComputeLighting();
 		test_ComputeSpecularReflectionComponent();
+		test_findClosestSphere();
 	}
 	catch(error)
 	{
@@ -635,8 +647,69 @@ function RunTests()
 	return true;
 }
 
+function loop() 
+{
+	"use strict";
 
-const ready = RunTests();
+	// rays start from the camera (O) and go through a section of the viewport
+	// setup as a parameter equation w.r.t. 't' to define points on the ray
+	// P = O + t(V-O)
+	// (V-O) is the direction of the ray, noted vD
+	// P = O +t*vD
+	//
+	// if t < 0, that is behind the camera
+	// if t in [0,1], that is between the camera and the viewport
+	// if t > 1, that is in the scene
+	//
+	// to define the points on a sphere, assume sphere with center C and radius r
+	// then, if P is a point on the sphere, the distance between the C and P is r.
+	// |P-C|=r
+	// sqrt(<P-C,P-c>)=r where <x,y> denotes inner product
+	// <P-C,P-C>=r^2
+	//
+	// substitute P from the first equestion into the second
+	//
+
+	// xxx: add in a check to assure that all light intensities sum to 1.0
+	//		this can be added into the scene class...if you ever create that
+
+	try
+	{
+		const t0 = performance.now();
+
+		for ( let x = -Cw/2; x < Cw/2; x++)
+		{
+			for( let y = -Ch/2; y < Ch/2; y++ )
+			{
+				let D = CanvasToViewport(x,y);
+				let color = TraceRay(O,D,1,Infinity);
+				assert( !isNaN(color[0]), "color is bad");
+				assert( !isNaN(color[1]), "color is bad");
+				assert( !isNaN(color[2]), "color is bad");
+				DrawPixel(x,y,color)
+			}
+		}
+
+		const t1 = performance.now();
+
+		ctx.putImageData(canvas_buffer, 0, 0);
+
+		console.log(`Call to doSomething took ${t1 - t0} milliseconds.`);
+		const div = document.getElementById("performance");
+		div.innerHTML = `Call to doSomething took ${t1 - t0} milliseconds.`;
+	}
+	catch(error)
+	{
+		const div = document.getElementById("performance");
+		div.innerHTML = "error rendering: "+error;
+
+		throw error;
+	}
+}
+
+
+//const ready = RunTests();
+const ready = true;
 
 if (ready) loop();
 
@@ -646,3 +719,6 @@ if (ready) loop();
 // [ ] create tests for ComputeLighting
 // [ ] create tests for VectorAdd
 // [ ] create tests for VectorSubtract
+// [ ] generate permuatations of lights and variablesj
+// [ ] add a scene object to encapsulate lights, spheres, etc
+// [ ] remove any magic numbers
