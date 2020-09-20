@@ -238,7 +238,26 @@ function IntersectRaySphere(origin, direction, sphere)
 
 	// minor optimization
 	// avoid recomputing
-	const k1Times2 = k1 << 1;
+	// premature optimization is not the root of all evil
+	// being cute is the root of all evil....
+	// and lest we forget, k1 IS NOT AN INTEGER
+	// ...the bit shifting "doesn't work"
+	// and of course there were no unit tests for this.
+	// might not have caught it either since k1 is the dot product
+	//	of the direction vector, and I might have picked integers
+	//	and thus the test might not have "passed"
+	//	---
+	//	so i calculated the number of this by hand.
+	//	then i wrote a test expecting it to pass
+	//	it passed with "* 2"
+	//	it passed with " << 1" because the direction vector was integers
+	const k1Times2xxx = k1 << 1;
+	const k1Times2 = k1 * 2;
+
+	//if ( Math.abs(k1Times2xxx-k1Times2) > 0.00001 )
+	//	console.log(`k1: ${k1}, xxx: ${k1Times2xxx}, actual: ${k1Times2}`);
+
+
 	const discriminantSquareRooted = Math.sqrt(discriminant);
 	const t1 = (-k2 + discriminantSquareRooted) / k1Times2;
 	const t2 = (-k2 - discriminantSquareRooted) / k1Times2;
@@ -624,6 +643,46 @@ function test_findClosestSphere()
 
 }
 
+function test_IntersectRaySphere()
+{
+	{
+		const O = MakePoint(0,0,0);
+		const D = MakePoint(1.0,1.0,1.0);
+		const s1 = new Sphere(MakePoint(1,1,1), .1, [255,0  ,0  ], 1 ); // shiny
+		const [t1,t2] = IntersectRaySphere(O,D,s1);
+		// OC = [-1,-1,-1]
+		// k1 = 3
+		// k2 = -6
+		// k3 = 3-.01
+		// discriminant = 36-4*3*2.99 = .12
+		// k1Times2 = 6
+		// discriminantSquareRooted = .34641
+		// t1 = 1.057735
+		// t2 = .942265 
+		const [t1_expected, t2_expected] = [1.057735, 0.942265];
+		assert( Math.abs(t1-t1_expected) < 0.001, "incorrect intersection found (t1)");
+		assert( Math.abs(t2-t2_expected) < 0.001, "incorrect intersection found (t2)");
+	}
+	{
+		const O = MakePoint(0,0,0);
+		const D = MakePoint(.1,.1,.1);
+		const s1 = new Sphere(MakePoint(1,1,1), .1, [255,0  ,0  ], 1 ); // shiny
+		const [t1,t2] = IntersectRaySphere(O,D,s1);
+		// OC = [-1,-1,-1]
+		// k1 = .03
+		// k2 = -.6
+		// k3 = 3-.01=2.99
+		// discriminant = 0.36-4*.03*2.99 = .0012
+		// k1Times2 = .06
+		// discriminantSquareRooted = .034641
+		// t1 = 1.57735 
+		// t2 = 9.42265
+		const [t1_expected, t2_expected] = [10.57735, 9.42265];
+		assert( Math.abs(t1-t1_expected) < 0.001, "incorrect intersection found for the fractional case (t1)");
+		assert( Math.abs(t2-t2_expected) < 0.001, "incorrect intersection found for the fractional case (t2)");
+	}
+}
+
 function RunTests()
 {
 	"use strict";
@@ -636,6 +695,7 @@ function RunTests()
 		test_ComputeLighting();
 		test_ComputeSpecularReflectionComponent();
 		test_findClosestSphere();
+		test_IntersectRaySphere();
 	}
 	catch(error)
 	{
@@ -708,8 +768,8 @@ function loop()
 }
 
 
-//const ready = RunTests();
-const ready = true;
+const ready = RunTests();
+//const ready = true;
 
 if (ready) loop();
 
