@@ -58,7 +58,91 @@ const Vw = 1;
 const Vh = 1;
 const  d = 1;
 
-const O = MakePoint(0,0,0);
+//const O = MakePoint(0,0,0);
+
+function doRotate2(idx1, idx2, radians)
+{
+	let x = this.location[idx1];
+	let y = this.location[idx2];
+	let xprime = x * Math.cos(radians) - y * Math.sin(radians);
+	let yprime = y * Math.cos(radians) + x * Math.sin(radians);
+	this.location[idx1] = x;
+	this.location[idx2] = y;
+}
+
+function RotateAroundX(v, radians)
+{
+	const mat = [[ 1, 0, 0],
+		[0, Math.cos(radians), Math.sin(radians)],
+		[0, -Math.sin(radians), Math.cos(radians)]];
+	return MultiplyVectorMatrix(v,mat);
+}
+function RotateAroundY(v, radians)
+{
+	const mat = [[ Math.cos(radians), 0, Math.sin(radians)],
+		[0, 1, 0],
+		[-Math.sin(radians), 0, Math.cos(radians)]];
+	return MultiplyVectorMatrix(v,mat);
+}
+
+function MultiplyVectorMatrix(v,mat)
+{
+	const result = [];
+	
+	for( const row of mat )
+	{
+		const data = DotProduct(row, v);
+		result.push(data);
+	}
+
+	return result;
+}
+
+class Camera
+{
+	constructor(x,y,z)
+	{
+		this.location = MakePoint(x,y,z);
+	}
+
+	doRotate(x,y, radians)
+	{
+		let xprime = x * Math.cos(radians) - y * Math.sin(radians);
+		let yprime = y * Math.cos(radians) + x * Math.sin(radians);
+		return [xprime, yprime];
+	}
+
+	RotateAroundX(radians)
+	{
+		// fixed x
+		let [y,z] = this.doRotate(this.location[1], this.location[2], radians);
+		this.location[1] = y;
+		this.location[2] = z;
+	}
+
+	RotateAroundY(radians)
+	{
+		// fixed y
+		let [x,z] = this.doRotate(this.location[0], this.location[2], radians);
+		this.location[0] = x;
+		this.location[2] = z;
+	}
+
+	RotateAroundZ(radians)
+	{
+		// fixed z
+		let [x,y] = this.doRotate(this.location[0], this.location[1], radians);
+		this.location[0] = x;
+		this.location[1] = y;
+	}
+
+	Translate(deltaX, deltaY, deltaZ)
+	{
+		this.location[0] += deltaX;
+		this.location[1] += deltaY;
+		this.location[2] += deltaZ;
+	}
+}
 
 class Sphere
 {
@@ -163,6 +247,8 @@ const l3 = Light.CreateDirectionalLight(0.2, MakePoint(1,4,4));
 
 const Spheres = [s1,s2,s3,s4];
 const Lights = [l1,l2,l3];
+
+const camera = new Camera(3,0,1);
 
 // just a little optimization
 // why calculate this for every invocation
@@ -683,6 +769,24 @@ function test_IntersectRaySphere()
 	}
 }
 
+function test_MultiplyVectorMatrix()
+{
+	const v = [1,1,1];
+	const mat = [[1,1,1], [1,1,1], [1,1,1]];
+	const result = MultiplyVectorMatrix(v,mat);
+	assert( result[0] == 3, "first position wrong");
+	assert( result[1] == 3, "second position wrong");
+	assert( result[2] == 3, "third position wrong");
+}
+
+function test_Camera()
+{
+	const camera = new Camera(3,2,1);
+	assert( camera.location[0] == 3, "bad location idx = 0");
+	assert( camera.location[1] == 2, "bad location idx = 1");
+	assert( camera.location[2] == 1, "bad location idx = 2");
+}
+
 function RunTests()
 {
 	"use strict";
@@ -696,6 +800,8 @@ function RunTests()
 		test_ComputeSpecularReflectionComponent();
 		test_findClosestSphere();
 		test_IntersectRaySphere();
+		test_MultiplyVectorMatrix();
+		test_Camera();
 	}
 	catch(error)
 	{
@@ -742,7 +848,14 @@ function loop()
 			for( let y = -Ch/2; y < Ch/2; y++ )
 			{
 				let D = CanvasToViewport(x,y);
-				let color = TraceRay(O,D,1,Infinity);
+				//let color = TraceRay(O,D,1,Infinity);
+
+				//camera.Translate(1,0,0);
+				//camera.RotateAroundY(Math.PI/2.0);
+
+				D = RotateAroundY(D, -Math.PI/4);
+
+				let color = TraceRay(camera.location,D,1,Infinity);
 				assert( !isNaN(color[0]), "color is bad");
 				assert( !isNaN(color[1]), "color is bad");
 				assert( !isNaN(color[2]), "color is bad");
